@@ -444,6 +444,8 @@ a.card:hover { border-color: var(--c-accent-border); background: var(--c-surface
 .status-item { display: inline-flex; align-items: center; gap: 5px; height: calc(var(--statusbar-h) - 1px); padding: 0 var(--space-3); border: 0; background: none; color: inherit; font: inherit; white-space: nowrap; }
 button.status-item { cursor: pointer; }
 button.status-item:hover { background: var(--c-surface-3); color: var(--c-fg); }
+button.status-item:disabled { opacity: 0.45; cursor: not-allowed; }
+button.status-item:disabled:hover { background: none; color: inherit; }
 .status-item svg { width: 11px; height: 11px; }
 
 /* ---------- 5. Views ---------- */
