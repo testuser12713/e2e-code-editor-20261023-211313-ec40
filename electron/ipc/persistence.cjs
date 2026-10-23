@@ -152,6 +152,16 @@ function getStore(ctx) {
   return store;
 }
 
+/** true when `p` is exactly a root main itself allowed (Open Folder dialog or session:load). */
+function isAllowedRoot(security, p) {
+  if (!security || typeof security.canonicalize !== 'function' || !security.allowedRoots) return false;
+  try {
+    return security.allowedRoots.has(security.canonicalize(p));
+  } catch {
+    return false;
+  }
+}
+
 /** @param ctx the handler context documented in electron/main.cjs */
 function register(ctx) {
   const s = () => getStore(ctx);
@@ -162,7 +172,8 @@ function register(ctx) {
   });
   ctx.handle('session:load', async () => {
     const session = s().loadSession();
-    // The restored workspace was chosen by the user in an earlier run.
+    // session.json holds only workspace paths main vouched for (see session:save):
+    // each was chosen by the user in a dialog, in this or an earlier run.
     if (session.lastWorkspace) {
       try {
         if (fs.statSync(session.lastWorkspace).isDirectory()) ctx.security.allowRoot(session.lastWorkspace);
@@ -171,13 +182,33 @@ function register(ctx) {
         session.lastWorkspace = null;
       }
     }
+    // The welcome screen may reopen any recent workspace; a vanished folder stays forbidden.
+    for (const p of session.recentWorkspaces) {
+      if (p === session.lastWorkspace) continue;
+      try {
+        if (fs.statSync(p).isDirectory()) ctx.security.allowRoot(p);
+      } catch {
+        // missing folder: not allowed, opening it reports an error in the explorer
+      }
+    }
     return session;
   });
   ctx.handle('session:save', async (session) => {
     if (!isPlainObject(session)) throw new Error('invalid-argument');
     // Window geometry is owned by the main process (windowState.cjs).
     const current = s().loadSession();
-    s().saveSession({ ...session, windowBounds: current.windowBounds });
+    const incoming = sanitizeSession(session);
+    // session:load grants access to the stored workspace paths, so only a path
+    // main already vouched for may be stored: one already in the file, or a
+    // root the user chose in this run (dialog or a granted recent workspace).
+    const vouched = (p) =>
+      p === current.lastWorkspace || current.recentWorkspaces.includes(p) || isAllowedRoot(ctx.security, p);
+    s().saveSession({
+      ...incoming,
+      recentWorkspaces: incoming.recentWorkspaces.filter(vouched),
+      lastWorkspace: incoming.lastWorkspace !== null && vouched(incoming.lastWorkspace) ? incoming.lastWorkspace : null,
+      windowBounds: current.windowBounds,
+    });
   });
   ctx.handle('session:clearRecent', async () => {
     const current = s().loadSession();
