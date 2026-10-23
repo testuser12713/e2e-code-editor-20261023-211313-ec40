@@ -1,0 +1,71 @@
+# office-crew-ci-gates: strict-v10
+# Auto-generated for Electron desktop apps v1 (GitHub Actions; the Vite pipeline, the
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+env:
+  ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - shell: bash
+        run: |
+          product=; for f in RUN.json package.json; do if [ -e "$f" ]; then product=1; fi; done; if [ -z "$product" ]; then echo "No product on this branch yet (no RUN.json, no package.json) — nothing to check"; exit 0; fi
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund || npm install --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+          npm run build
+          if grep -q '"test"' package.json; then T=$(sed -n 's/.*"test"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -1); A=''; case "$T" in *vitest*) case "$T" in *--run*|*" run"*) ;; *) A="--run";; esac; case "$T" in *--passWithNoTests*) ;; *) A="$A --passWithNoTests";; esac;; *jest*) case "$T" in *--passWithNoTests*) ;; *) A="--passWithNoTests";; esac;; esac; if [ -n "$A" ]; then npm test -- $A; else npm test; fi; else shopt -s nullglob; tests=(tests/*.test.mjs tests/*.test.js src/*.test.mjs); if [ ${#tests[@]} -gt 0 ]; then echo "No test script in package.json — running ${#tests[@]} node test file(s)"; node --test "${tests[@]}"; else echo 'No test script in package.json — skip'; fi; fi
+  lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - shell: bash
+        run: |
+          product=; for f in RUN.json package.json; do if [ -e "$f" ]; then product=1; fi; done; if [ -z "$product" ]; then echo "No product on this branch yet (no RUN.json, no package.json) — nothing to check"; exit 0; fi
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund || npm install --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - shell: bash
+        run: |
+          if [ -f .eslintrc.json ] || [ -f .eslintrc.cjs ] || [ -f eslint.config.js ] || [ -f eslint.config.mjs ]; then
+            npx eslint . --max-warnings=0 || true
+          fi
+          if [ -f tsconfig.json ]; then
+            npx tsc --noEmit || true
+          fi
+
+  # office-crew-scan: v3 betterleaks=1.9.0 osv-scanner=2.5.1
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the scanners
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/oc-scan" && cd "$RUNNER_TEMP/oc-scan"
+          curl -fsSL -o betterleaks.tar.gz "https://github.com/betterleaks/betterleaks/releases/download/v1.9.0/betterleaks_1.9.0_linux_x64.tar.gz"
+          echo "f8b185a39ffcece2a1ca82bf3a4e7435cd81963ffd16b7a9128daf75f35f6de7  betterleaks.tar.gz" | sha256sum -c -
+          tar -xzf betterleaks.tar.gz betterleaks
+          curl -fsSL -o osv-scanner "https://github.com/google/osv-scanner/releases/download/v2.5.1/osv-scanner_linux_amd64"
+          echo "f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be  osv-scanner" | sha256sum -c -
+          chmod +x betterleaks osv-scanner
+          : > osv-scanner.toml
+      - name: Committed credentials
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/oc-scan/betterleaks" dir . --config .office-crew-betterleaks.toml --max-target-megabytes 5 --max-archive-depth 0 --no-banner --redact --exit-code 1
+      - name: Vulnerable dependencies (reported)
+        if: always()
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/oc-scan/osv-scanner" scan source --no-resolve --experimental-disable-plugins java/pomxml --allow-no-lockfiles --config "$RUNNER_TEMP/oc-scan/osv-scanner.toml" --recursive . || echo "osv-scanner ended with $? — reported only, nothing fails on it."
+          "$RUNNER_TEMP/oc-scan/osv-scanner" scan source --experimental-no-default-plugins --experimental-plugins java/pomxml --allow-no-lockfiles --config "$RUNNER_TEMP/oc-scan/osv-scanner.toml" --recursive . || echo "osv-scanner ended with $? — reported only, nothing fails on it."
