@@ -20,6 +20,7 @@ import { api, errorCode, isDesktop } from './platform';
 import { installKeybindings } from './commands/keybindings';
 import { getCommand, hasHandler, runCommand } from './commands/registry';
 import type { SidebarView, ThemeSetting } from './types';
+import { resolveTheme } from './core/settings';
 import { Explorer } from './views/Explorer';
 import { SearchView } from './views/SearchView';
 import { SettingsView } from './views/SettingsView';
@@ -259,7 +260,9 @@ function useThemeAttribute(theme: ThemeSetting): void {
     const root = document.documentElement;
     const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
     const apply = () => {
-      root.dataset.theme = theme === 'system' ? (mq?.matches ? 'dark' : 'light') : theme;
+      // The same resolution the editors use (src/editor/settingsExtensions.ts), so
+      // the shell and every open editor always show one theme.
+      root.dataset.theme = resolveTheme(theme, mq?.matches ?? false);
     };
     apply();
     if (theme !== 'system' || !mq) return;
