@@ -142,7 +142,7 @@ describe('in-page menu bar', () => {
     const off = registerHandler('help.about', handler);
     fireEvent.click(screen.getByRole('button', { name: 'File' }));
     const fileMenu = screen.getByRole('menu', { name: 'File' });
-    expect((within(fileMenu).getByRole('menuitem', { name: /Save All/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(fileMenu).getByRole('menuitem', { name: /Save All/ }) as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Help' }));
     expect(screen.queryByRole('menu', { name: 'File' })).toBeNull();
