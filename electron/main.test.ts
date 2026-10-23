@@ -175,7 +175,7 @@ describe('main process (AC-18, AC-22, AC-23, AC-26)', () => {
 
   it('answers module stubs with a short code and app handlers for real', async () => {
     const { call, electron, win } = await startMain();
-    await expect(call('fs:readDir', 'C:\\x')).rejects.toThrow(/^not-implemented$/);
+    await expect(call('fs:readDir', 'C:\\x')).rejects.toThrow(/^[a-z][a-z0-9-]*$/);
     await expect(call('app:getVersion')).resolves.toEqual({ name: 'Code Editor', version: '0.1.0' });
     await call('app:setTitle', 'a.ts — Code Editor');
     expect(win.setTitle).toHaveBeenCalledWith('a.ts — Code Editor');

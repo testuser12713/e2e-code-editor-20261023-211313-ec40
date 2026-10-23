@@ -44,6 +44,18 @@ function assertPath(value) {
   return value;
 }
 
+/** File content for writeFile: a string, empty allowed, at most 64 MB. */
+const MAX_CONTENT = 64 * 1024 * 1024;
+function assertContent(value) {
+  return assertString(value, { max: MAX_CONTENT, allowEmpty: true });
+}
+
+/** An optional path (undefined/null pass, anything else must be a path). */
+function assertOptionalPath(value) {
+  if (value === undefined || value === null) return undefined;
+  return assertPath(value);
+}
+
 /** SearchRequest of the bridge contract, with the 500-character query limit. */
 function assertSearchRequest(value) {
   assertPlainObject(value);
@@ -75,5 +87,8 @@ module.exports = {
   assertPlainObject,
   assertPath,
   assertSearchRequest,
+  assertContent,
+  assertOptionalPath,
+  MAX_CONTENT,
   assertMenuState,
 };
