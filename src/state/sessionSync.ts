@@ -89,12 +89,16 @@ export function startSessionSync(deps: SessionSyncDeps): () => void {
   };
 
   const restore = async () => {
+    // A setting the user changes while the stored settings are still loading
+    // (e.g. picking Dark in the Settings view right after start) must win over
+    // the stored copy; it is persisted by onChange once restoring is done.
+    const settingsAtStart = store.getState().settings;
     const [settings, session] = await Promise.all([
       api.settings.load().then(parseSettings, () => null),
       api.session.load().then(parseSession, () => parseSession(null)),
     ]);
     if (stopped) return;
-    if (settings) {
+    if (settings && store.getState().settings === settingsAtStart) {
       store.dispatch({ type: 'settings/set', settings });
       lastSettings = JSON.stringify(settings);
     }

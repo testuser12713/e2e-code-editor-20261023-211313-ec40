@@ -8,6 +8,7 @@
  */
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ComponentType,
@@ -248,9 +249,13 @@ function baseName(path: string): string {
   return i >= 0 ? path.slice(i + 1) : path;
 }
 
-/** Sets data-theme on <html> from the setting, following the OS scheme for "system". */
+/**
+ * Sets data-theme on <html> from the setting, following the OS scheme for
+ * "system". A layout effect, so the window background changes in the same
+ * commit as the setting (no frame in the old theme).
+ */
 function useThemeAttribute(theme: ThemeSetting): void {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     const mq = typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
     const apply = () => {
