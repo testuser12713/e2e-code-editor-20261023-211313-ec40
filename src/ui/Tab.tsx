@@ -84,11 +84,24 @@ export function TabItem({
       <button className="tab-label" type="button" onClick={onSelect} onDoubleClick={onPin}>
         {readOnly ? <Icon name="lock" className="tab-lock" /> : null}
         <span className="tab-name">{name}</span>
-        {dirty ? <span className="sr-only"> (unsaved)</span> : null}
+        {dirty ? <span className="sr-only tab-dirty-label"> (unsaved)</span> : null}
       </button>
       <button className="tab-close" type="button" aria-label={`Close ${name}`} title={`Close ${name}`} onClick={onClose} disabled={!onClose}>
         <Icon name="close" />
-        <span className="tab-dot" />
+        {/* The dot itself names the unsaved state (class, accessible name and
+            tooltip), so the marker is identifiable inside the tab and not only
+            through the `is-dirty` class on the tab element. */}
+        {dirty ? (
+          <span
+            className="tab-dot tab-dirty-dot"
+            role="img"
+            aria-label="Unsaved changes"
+            title="Unsaved changes"
+            data-testid="tab-dirty-dot"
+          />
+        ) : (
+          <span className="tab-dot" aria-hidden="true" />
+        )}
       </button>
     </div>
   );
