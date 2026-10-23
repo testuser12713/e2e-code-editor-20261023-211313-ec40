@@ -122,6 +122,25 @@ function syncViewWithDoc(view: EditorView, entry: Entry, doc: Doc): void {
   }
 }
 
+/**
+ * Moves the keyboard focus into the editor after a file was opened (from the
+ * welcome screen, the explorer, a search result …) or its tab was made
+ * permanent, so typing goes straight into the document. The focus is left
+ * alone while the user is in a text field or a dialog, and when it already is
+ * in the editor.
+ */
+export function focusEditorAfterOpen(view: EditorView): void {
+  if (typeof document === 'undefined') return;
+  const active = document.activeElement as HTMLElement | null;
+  if (active && active !== document.body) {
+    if (view.dom.contains(active)) return;
+    if (active.closest('[role="dialog"], [role="alertdialog"]')) return;
+    const tag = active.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active.isContentEditable) return;
+  }
+  view.focus();
+}
+
 function createEntry(host: EditorHost, store: AppStoreHandle, doc: Doc): Entry {
   const entry: Entry = {
     path: doc.path,
@@ -202,7 +221,22 @@ function CodeEditor({ host, path }: { host: EditorHost; path: string }) {
     store.dispatch({ type: 'cursor/set', cursor: cursorOf(view.state) });
     const reveal = takeReveal(path);
     if (reveal) applyReveal(view, reveal);
+    // A file that was just opened or switched to takes the keyboard; the
+    // neighbour that is shown because the active tab was closed does not.
+    const opened = !prev || store.getState().tabs.some((t) => t.path === prev.path);
+    if (opened) focusEditorAfterOpen(view);
   }, [host, store, path]);
+
+  // Making the tab permanent (double click in the explorer or on the tab) also
+  // means "I want to edit this": the typing goes into the editor.
+  const preview = state.tabs.find((t) => t.path === path)?.preview ?? false;
+  const lastPreview = useRef({ path, preview });
+  useEffect(() => {
+    const view = viewRef.current;
+    const last = lastPreview.current;
+    if (view && last.path === path && last.preview && !preview) focusEditorAfterOpen(view);
+    lastPreview.current = { path, preview };
+  }, [path, preview]);
 
   // Reveal requests for the document that is already shown.
   useEffect(
