@@ -80,26 +80,93 @@ function hardenWebContents(contents, openExternal) {
 
 /* ---------- path allow-list (filled by the file-system IPC ticket) ---------- */
 
+const fs = require('node:fs');
+const nodePath = require('node:path');
+
 const allowedRoots = new Set();
 const allowedPaths = new Set();
 
+const IS_WIN = process.platform === 'win32';
+
+function cmpKey(p) {
+  return IS_WIN ? p.toLowerCase() : p;
+}
+
+/**
+ * Absolute, normalised path with every symlink of its EXISTING part resolved
+ * (realpath of the deepest existing ancestor, the not-yet-existing rest
+ * appended). Throws Error('invalid-path') for non-strings and NUL bytes.
+ */
+function canonicalize(p) {
+  if (typeof p !== 'string' || p.length === 0 || p.includes('\0')) throw new Error('invalid-path');
+  let current = nodePath.resolve(p);
+  const rest = [];
+  for (;;) {
+    try {
+      const real = fs.realpathSync.native(current);
+      return rest.length ? nodePath.join(real, ...rest.reverse()) : real;
+    } catch (err) {
+      const parent = nodePath.dirname(current);
+      if (parent === current || (err && err.code !== 'ENOENT' && err.code !== 'ENOTDIR')) {
+        throw new Error('invalid-path');
+      }
+      rest.push(nodePath.basename(current));
+      current = parent;
+    }
+  }
+}
+
+function isInside(child, root) {
+  const c = cmpKey(child);
+  const r = cmpKey(root);
+  if (c === r) return true;
+  const rel = nodePath.relative(r, c);
+  return rel.length > 0 && !rel.startsWith('..') && !nodePath.isAbsolute(rel);
+}
+
 /** Allows a workspace root chosen in the Open Folder dialog (and everything below it). */
 function allowRoot(p) {
-  if (typeof p === 'string' && p.length > 0) allowedRoots.add(p);
+  if (typeof p !== 'string' || p.length === 0) return;
+  try {
+    allowedRoots.add(canonicalize(p));
+  } catch {
+    // an unusable path simply stays not allowed
+  }
 }
 
 /** Allows one path chosen in an Open File / Save As dialog. */
 function allowPath(p) {
-  if (typeof p === 'string' && p.length > 0) allowedPaths.add(p);
+  if (typeof p !== 'string' || p.length === 0) return;
+  try {
+    allowedPaths.add(cmpKey(canonicalize(p)));
+  } catch {
+    // an unusable path simply stays not allowed
+  }
 }
 
 /**
- * Throws Error('path-not-allowed') unless `p` lies inside an allowed root or
- * is an allowed path. Skeleton: fails closed for every path.
+ * Throws Error('path-not-allowed') unless `p` — after resolving `..` and
+ * symlinks — lies inside an allowed root or is an allowed path.
+ * Returns the canonical path the caller must use for the actual access.
  */
 function assertAllowedPath(p) {
-  void p;
+  let real;
+  try {
+    real = canonicalize(p);
+  } catch {
+    throw new Error('path-not-allowed');
+  }
+  if (allowedPaths.has(cmpKey(real))) return real;
+  for (const root of allowedRoots) {
+    if (isInside(real, root)) return real;
+  }
   throw new Error('path-not-allowed');
+}
+
+/** Test helper: forgets every allowed root and path. */
+function resetAllowed() {
+  allowedRoots.clear();
+  allowedPaths.clear();
 }
 
 module.exports = {
@@ -109,6 +176,9 @@ module.exports = {
   allowRoot,
   allowPath,
   assertAllowedPath,
+  canonicalize,
+  isInside,
+  resetAllowed,
   // exposed for the file-system IPC implementation
   allowedRoots,
   allowedPaths,
