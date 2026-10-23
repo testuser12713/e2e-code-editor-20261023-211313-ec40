@@ -113,6 +113,47 @@ describe('ExplorerContextMenu', () => {
     expect(await screen.findByTestId('tree-row-created-by-menu.ts')).toBeTruthy();
   });
 
+  it('regression: New File on a collapsed folder makes the new file appear in the tree at once', async () => {
+    await setup();
+    // test\ is collapsed: right-click it, New File, type a name, Enter
+    expect(screen.queryByTestId('tree-row-args.test.ts')).toBeNull();
+    fireEvent.contextMenu(screen.getByTestId('tree-row-test'));
+    fireEvent.click(screen.getByTestId('ctx-new-file'));
+    const input = screen.getByTestId('explorer-name-input');
+    fireEvent.change(input, { target: { value: 'from-collapsed.txt' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    const row = await screen.findByTestId('tree-row-from-collapsed.txt');
+    expect(row.closest('[role="treeitem"]')?.textContent).toBe('from-collapsed.txt');
+    // the folder it went into is open, and the new entry is selected
+    expect(screen.getByTestId('tree-row-test').closest('[role="treeitem"]')?.getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => expect(row.closest('[role="treeitem"]')?.getAttribute('aria-selected')).toBe('true'));
+    expect(await api.fs.stat(`${WS}\\test\\from-collapsed.txt`)).toMatchObject({ isDir: false });
+  });
+
+  it('a name with angle brackets is never inserted as HTML: the validation message and a disk entry stay plain text', async () => {
+    await setup();
+    const create = vi.spyOn(api.fs, 'createFile');
+    fireEvent.contextMenu(screen.getByTestId('tree-row-package.json'));
+    fireEvent.click(screen.getByTestId('ctx-new-file'));
+    const input = screen.getByTestId('explorer-name-input');
+    fireEvent.change(input, { target: { value: '<b>bold.txt' } });
+    expect(screen.getByRole('alert').textContent).toMatch(/cannot contain/);
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await act(async () => {});
+    expect(create).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: 'Escape' });
+    // An entry with such a name that already exists on disk (allowed outside Windows) shows as text.
+    await act(async () => {
+      await api.fs.writeFile(`${WS}\\<b>bold.txt`, 'x');
+    });
+    const row = await screen.findByTestId('tree-row-<b>bold.txt');
+    expect(row.textContent).toBe('<b>bold.txt');
+    expect(row.querySelector('b')).toBeNull();
+    await act(async () => {
+      await api.fs.trash(`${WS}\\<b>bold.txt`);
+    });
+  });
+
   it('New Folder on a file creates the folder next to it', async () => {
     await setup();
     const createDir = vi.spyOn(api.fs, 'createDir');

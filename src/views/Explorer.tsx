@@ -170,6 +170,41 @@ export function closeExplorerContextMenu(): void {
   for (const l of [...menuTargetListeners]) l(null);
 }
 
+/* ---------- reveal hand-off ---------- */
+
+const revealListeners = new Set<(path: string, expandSelf: boolean) => void>();
+
+/**
+ * Makes `path` visible in the tree: every folder between the workspace root
+ * and the entry is expanded (and re-read), and once the entry's row exists it
+ * is selected, focused and scrolled into view. With `expandSelf` the folder
+ * `path` itself is expanded too (the target of New File / New Folder).
+ * The ExplorerContextMenu calls this after creating an entry, so a file made
+ * inside a collapsed folder appears at once instead of hiding in it.
+ */
+export function revealInExplorer(path: string, opts: { expandSelf?: boolean } = {}): void {
+  for (const l of [...revealListeners]) l(path, opts.expandSelf ?? false);
+}
+
+/** true when `path` lies strictly below `root`. */
+function isBelow(path: string, root: string): boolean {
+  const p = pathKey(path);
+  const r = pathKey(root);
+  const sep = pathSep(root);
+  return p !== r && p.startsWith(r.endsWith(sep) ? r : r + sep);
+}
+
+/** The folders between `root` (exclusive) and `path` (exclusive), outermost first. */
+export function foldersBetween(root: string, path: string): string[] {
+  const out: string[] = [];
+  let p = parentPath(path);
+  while (p !== null && isBelow(p, root)) {
+    out.unshift(p);
+    p = parentPath(p);
+  }
+  return out;
+}
+
 function requestContextMenu(req: ExplorerContextMenuRequest): boolean {
   if (menuListeners.size === 0) return false;
   for (const l of [...menuTargetListeners]) l(req.node.path);
@@ -243,6 +278,8 @@ function WorkspaceTree({ root, version, activeTab }: { root: string; version: nu
   const wrapRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLButtonElement>());
   const pendingFocus = useRef<string | null>(null);
+  /** An entry to select once its row appears (see revealInExplorer). */
+  const pendingReveal = useRef<string | null>(null);
 
   useEffect(() => {
     alive.current = true;
@@ -376,6 +413,38 @@ function WorkspaceTree({ root, version, activeTab }: { root: string; version: nu
     },
     [rows, scrollIntoView],
   );
+
+  /* -- reveal requests (a created entry inside a possibly collapsed folder) -- */
+
+  useEffect(() => {
+    const onReveal = (path: string, expandSelf: boolean) => {
+      if (!isBelow(path, root)) return;
+      const dirs = foldersBetween(root, path);
+      if (expandSelf) dirs.push(path);
+      if (dirs.length > 0) {
+        setExpanded((s) => {
+          const n = new Map(s);
+          for (const d of dirs) n.set(pathKey(d), d);
+          return n;
+        });
+        for (const d of dirs) void loadDir(d);
+      }
+      if (!expandSelf) pendingReveal.current = path;
+    };
+    revealListeners.add(onReveal);
+    return () => {
+      revealListeners.delete(onReveal);
+    };
+  }, [root, loadDir]);
+
+  useEffect(() => {
+    const target = pendingReveal.current;
+    if (!target) return;
+    const index = indexOf(target);
+    if (index < 0) return;
+    pendingReveal.current = null;
+    moveFocus(index);
+  }, [indexOf, moveFocus]);
 
   useEffect(() => {
     const target = pendingFocus.current;
