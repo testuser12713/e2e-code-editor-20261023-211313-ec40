@@ -254,4 +254,78 @@ describe('dirty marker, save and close flow', () => {
     expect(screen.queryByTestId('unsaved-dialog')).toBeNull();
     expect(screen.queryByTestId('tab-b.md')).toBeNull();
   });
+
+  // Regression (AC-04, AC-07): a single click on a second file REPLACES the
+  // preview tab; the editor used to read the vanished preview as "the active
+  // tab was closed" and left the focus on the explorer row, so the typing
+  // never reached the document and there was nothing to save.
+  it('a preview replaced by the next single click takes the keyboard: type, save, close', async () => {
+    vi.spyOn(api.fs, 'writeFile').mockImplementation(async () => undefined);
+    const store = setup();
+    const row = document.createElement('button');
+    document.body.appendChild(row);
+    row.focus();
+    await open(store, A, { preview: true });
+    row.focus();
+    await open(store, C, { preview: true });
+    expect(store.getState().tabs).toEqual([{ path: C, preview: true }]);
+    const view = getActiveView();
+    if (!view) throw new Error('no view');
+    expect(view.dom.contains(document.activeElement)).toBe(true);
+
+    typeInEditor('y');
+    expect(screen.getByTestId('tab-c.py').className).toContain('is-dirty');
+    await act(async () => {
+      runCommand('file.save');
+    });
+    await waitFor(() => expect(screen.getByTestId('tab-c.py').className).not.toContain('is-dirty'));
+    await act(async () => {
+      runCommand('tab.close');
+    });
+    expect(store.getState().tabs).toEqual([]);
+    row.remove();
+  });
+
+  it('a replaced preview tab is a different file, not a rename: it gets its own editor state', async () => {
+    const store = setup();
+    await open(store, A, { preview: true });
+    const stateOfA = getActiveView()!.state;
+    await open(store, C, { preview: true });
+    expect(getActiveView()!.state).not.toBe(stateOfA);
+    expect(editorText()).toBe(FILES[C].content);
+    act(() => {
+      undo(getActiveView()!);
+    });
+    // Nothing to undo in a freshly opened file: A's text must not come back.
+    expect(editorText()).toBe(FILES[C].content);
+    expect(store.getState().docs[C].text).toBe(FILES[C].content);
+  });
+
+  it('a real rename keeps the editor state (undo history) of the file', async () => {
+    const store = setup();
+    await open(store, A);
+    typeInEditor('R');
+    const renamed = 'C:\\w\\renamed.ts';
+    act(() => store.dispatch({ type: 'path/rename', from: A, to: renamed }));
+    expect(store.getState().activeTab).toBe(renamed);
+    expect(editorText().startsWith('Rconst')).toBe(true);
+    act(() => {
+      undo(getActiveView()!);
+    });
+    expect(store.getState().docs[renamed].text).toBe(FILES[A].content);
+  });
+
+  it('a tab closed from outside (delete in the explorer) does not move the focus into the editor', async () => {
+    const store = setup();
+    await open(store, A);
+    await open(store, B);
+    const row = document.createElement('button');
+    document.body.appendChild(row);
+    row.focus();
+    act(() => store.dispatch({ type: 'tab/close', path: B }));
+    expect(store.getState().activeTab).toBe(A);
+    expect(editorText()).toBe(FILES[A].content);
+    expect(document.activeElement).toBe(row);
+    row.remove();
+  });
 });

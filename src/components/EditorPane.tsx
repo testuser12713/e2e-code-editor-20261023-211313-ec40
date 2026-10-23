@@ -44,6 +44,10 @@ interface Entry {
 interface EditorHost {
   entries: Map<string, Entry>;
   shown: Entry | null;
+  /** Path whose activation asked for the keyboard and has not received it yet. */
+  focusRequest: string | null;
+  /** Hands the keyboard to the shown editor when it is the requested file (set while a view exists). */
+  flushFocus: (() => void) | null;
 }
 
 function baseName(path: string): string {
@@ -78,13 +82,25 @@ export function applyReveal(view: EditorView, req: RevealRequest): void {
   view.focus();
 }
 
-/** Follows renames (tab positions stay, paths change) and forgets closed docs. */
-function reconcileEntries(host: EditorHost, prevTabs: Tab[], tabs: Tab[], docs: Record<string, Doc>): void {
+/**
+ * Follows renames (tab positions stay, paths change) and forgets closed docs.
+ * A rename moves a doc to a path that had no doc before; a preview tab that a
+ * single click replaces in place keeps the tab count too, but its new doc was
+ * loaded before the tab opened — that is a different file, not a rename, and
+ * must get its own editor state (and the swap that focuses it).
+ */
+function reconcileEntries(
+  host: EditorHost,
+  prevTabs: Tab[],
+  tabs: Tab[],
+  prevDocs: Record<string, Doc>,
+  docs: Record<string, Doc>,
+): void {
   if (prevTabs.length === tabs.length) {
     const now = new Set(tabs.map((t) => t.path));
     prevTabs.forEach((old, i) => {
       const np = tabs[i].path;
-      if (old.path === np || now.has(old.path)) return;
+      if (old.path === np || now.has(old.path) || prevDocs[np]) return;
       const entry = host.entries.get(old.path);
       if (!entry || host.entries.has(np)) return;
       host.entries.delete(old.path);
@@ -141,6 +157,29 @@ export function focusEditorAfterOpen(view: EditorView): void {
   view.focus();
 }
 
+/**
+ * Whether a change of the active tab means "the user wants to type here":
+ * opening a file (a preview tab replaced by the next single click included)
+ * or switching to another tab. Not when the active tab was closed and its
+ * neighbour is merely shown (e.g. a delete in the explorer), and not when the
+ * active file was renamed (its doc did not exist under the new path before).
+ *
+ * The old rule only asked "is the previous tab gone?" — a replaced preview
+ * tab is gone too, so the click's typing stayed on the explorer row.
+ */
+export function wantsKeyboard(
+  prevActive: string | null,
+  prevTabs: Tab[],
+  prevDocs: Record<string, Doc>,
+  active: string | null,
+  tabs: Tab[],
+): boolean {
+  if (active === null || !prevDocs[active]) return false;
+  const prevGone = prevActive !== null && !tabs.some((t) => t.path === prevActive);
+  const wasOpenBefore = prevTabs.some((t) => t.path === active);
+  return !(prevGone && wasOpenBefore);
+}
+
 function createEntry(host: EditorHost, store: AppStoreHandle, doc: Doc): Entry {
   const entry: Entry = {
     path: doc.path,
@@ -184,7 +223,13 @@ function CodeEditor({ host, path }: { host: EditorHost; path: string }) {
     const view = new EditorView({ parent: parentRef.current ?? undefined });
     viewRef.current = view;
     setActiveView(view);
+    host.flushFocus = () => {
+      if (!host.shown || host.focusRequest !== host.shown.path) return;
+      host.focusRequest = null;
+      focusEditorAfterOpen(view);
+    };
     return () => {
+      host.flushFocus = null;
       const shown = host.shown;
       if (shown && host.entries.get(shown.path) === shown) {
         shown.state = view.state;
@@ -221,14 +266,19 @@ function CodeEditor({ host, path }: { host: EditorHost; path: string }) {
     store.dispatch({ type: 'cursor/set', cursor: cursorOf(view.state) });
     const reveal = takeReveal(path);
     if (reveal) applyReveal(view, reveal);
-    // A file that was just opened or switched to takes the keyboard; the
-    // neighbour that is shown because the active tab was closed does not.
-    const opened = !prev || store.getState().tabs.some((t) => t.path === prev.path);
-    if (opened) focusEditorAfterOpen(view);
+    // The first document of a fresh view takes the keyboard; after that the
+    // focus request the store subscriber recorded for this activation decides
+    // (see wantsKeyboard).
+    if (!prev) {
+      if (host.focusRequest === path) host.focusRequest = null;
+      focusEditorAfterOpen(view);
+    } else {
+      host.flushFocus?.();
+    }
   }, [host, store, path]);
 
-  // Making the tab permanent (double click in the explorer or on the tab) also
-  // means "I want to edit this": the typing goes into the editor.
+  // Making the shown tab permanent (double click in the explorer or on the
+  // tab) also means "I want to edit this": the typing goes into the editor.
   const preview = state.tabs.find((t) => t.path === path)?.preview ?? false;
   const lastPreview = useRef({ path, preview });
   useEffect(() => {
@@ -307,16 +357,22 @@ function LargeFileView({ doc }: { doc: Doc }) {
 export function EditorPane() {
   const { state } = useApp();
   const store = useAppStore();
-  const [host] = useState<EditorHost>(() => ({ entries: new Map(), shown: null }));
+  const [host] = useState<EditorHost>(() => ({ entries: new Map(), shown: null, focusRequest: null, flushFocus: null }));
+
 
   useEffect(() => {
     let prevTabs = store.getState().tabs;
     let prevDocs = store.getState().docs;
-    reconcileEntries(host, prevTabs, prevTabs, prevDocs);
+    let prevActive = store.getState().activeTab;
+    reconcileEntries(host, prevTabs, prevTabs, prevDocs, prevDocs);
     return store.subscribe(() => {
       const s = store.getState();
+      if (s.activeTab !== prevActive) {
+        host.focusRequest = wantsKeyboard(prevActive, prevTabs, prevDocs, s.activeTab, s.tabs) ? s.activeTab : null;
+        prevActive = s.activeTab;
+      }
       if (s.tabs === prevTabs && s.docs === prevDocs) return;
-      reconcileEntries(host, prevTabs, s.tabs, s.docs);
+      reconcileEntries(host, prevTabs, s.tabs, prevDocs, s.docs);
       prevTabs = s.tabs;
       prevDocs = s.docs;
     });
