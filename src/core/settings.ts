@@ -79,6 +79,30 @@ export function serializeSettings(s: Settings): string {
   return JSON.stringify(parseSettings(s), null, 2);
 }
 
+/**
+ * Settings with one field set from a form control's raw value (a select's
+ * string or a switch's checked flag), validated like stored settings. Returns
+ * the SAME object when the key is unknown, the value is invalid or nothing
+ * changes, so callers can skip a no-op dispatch by identity.
+ */
+export function withSetting(s: Settings, key: string, raw: string | boolean): Settings {
+  if (!(key in DEFAULT_SETTINGS)) return s;
+  const k = key as keyof Settings;
+  let value: unknown = raw;
+  if (typeof DEFAULT_SETTINGS[k] === 'number') {
+    if (typeof raw !== 'string' || raw.trim() === '') return s;
+    value = Number(raw);
+  } else if (typeof DEFAULT_SETTINGS[k] === 'boolean') {
+    if (typeof raw !== 'boolean') return s;
+  } else if (typeof raw !== 'string') {
+    return s;
+  }
+  const next = parseSettings({ ...s, [k]: value });
+  // parseSettings falls back to the default for an invalid value; that is a rejection here.
+  if (next[k] !== value) return s;
+  return JSON.stringify(next) === JSON.stringify(parseSettings(s)) ? s : next;
+}
+
 /** The theme actually shown: 'system' follows prefers-color-scheme. */
 export function resolveTheme(theme: ThemeSetting, systemDark: boolean): 'dark' | 'light' {
   if (theme === 'dark' || theme === 'light') return theme;

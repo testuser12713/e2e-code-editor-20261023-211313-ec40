@@ -6,10 +6,10 @@
  * reconfigure live (src/editor/settingsExtensions.ts) and the session sync
  * stores the settings through settings.save.
  */
-import { useEffect, useState } from 'react';
-import { useApp } from '../state/AppStore';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useApp, useAppStore, type AppStoreHandle } from '../state/AppStore';
 import type { Settings, ThemeSetting } from '../types';
-import { FONT_FAMILIES, MAX_FONT_SIZE, MIN_FONT_SIZE, TAB_SIZES, clampFontSize } from '../core/settings';
+import { FONT_FAMILIES, MAX_FONT_SIZE, MIN_FONT_SIZE, TAB_SIZES, clampFontSize, withSetting } from '../core/settings';
 import { installSettingsRuntime } from '../editor/settingsExtensions';
 import { Select, SettingRow, SettingsGroup, SidebarBody, SidebarHeader, Switch, TextInput, type SelectOption } from '../ui';
 
@@ -60,18 +60,73 @@ function FontSizeInput({ value, onCommit }: { value: number; onCommit: (size: nu
   );
 }
 
+/**
+ * Controls whose value the form commits straight from the DOM. The font size
+ * field is left out on purpose: it keeps a draft while typing and clamps on blur.
+ */
+const DOM_BOUND_SETTINGS = new Set<string>([
+  'theme',
+  'fontFamily',
+  'tabSize',
+  'insertSpaces',
+  'wordWrap',
+  'lineNumbers',
+  'trimOnSave',
+  'finalNewlineOnSave',
+]);
+
+/** Commits one control's current DOM value to the store; a no-op when nothing changes. */
+function commitControl(store: AppStoreHandle, target: EventTarget | null): void {
+  if (!(target instanceof HTMLSelectElement) && !(target instanceof HTMLInputElement)) return;
+  const key = target.dataset.setting;
+  if (!key || !DOM_BOUND_SETTINGS.has(key)) return;
+  const raw = target instanceof HTMLInputElement && target.type === 'checkbox' ? target.checked : target.value;
+  const current = store.getState().settings;
+  const next = withSetting(current, key, raw);
+  if (next !== current) store.dispatch({ type: 'settings/set', settings: next });
+}
+
+/**
+ * Binds the form's controls to the store with NATIVE listeners. React's
+ * onChange only sees a `change` event that bubbles up to the React root, so
+ * a select whose value changes through an `input` event, or through a
+ * `change` event that does not bubble, used to show "Dark" while the app
+ * stayed light. A capture listener on the form sees every input/change of a
+ * control inside it, bubbling or not, and commits the value the control
+ * shows — the select and the applied theme can no longer disagree.
+ */
+function useNativeSettingsBinding(form: RefObject<HTMLFormElement | null>, store: AppStoreHandle): void {
+  useEffect(() => {
+    const el = form.current;
+    if (!el) return;
+    const onEvent = (e: Event) => commitControl(store, e.target);
+    el.addEventListener('input', onEvent, true);
+    el.addEventListener('change', onEvent, true);
+    return () => {
+      el.removeEventListener('input', onEvent, true);
+      el.removeEventListener('change', onEvent, true);
+    };
+  }, [form, store]);
+}
+
 export function SettingsView() {
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
+  const store = useAppStore();
+  const formRef = useRef<HTMLFormElement>(null);
+  useNativeSettingsBinding(formRef, store);
   const s = state.settings;
+  /** Always builds on the store's current settings, so two quick changes never undo each other. */
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    dispatch({ type: 'settings/set', settings: { ...s, [key]: value } });
+    const current = store.getState().settings;
+    if (current[key] === value) return;
+    store.dispatch({ type: 'settings/set', settings: { ...current, [key]: value } });
   };
 
   return (
     <>
       <SidebarHeader title="Settings" />
       <SidebarBody>
-        <form className="settings-form" data-testid="settings-form" onSubmit={(e) => e.preventDefault()}>
+        <form ref={formRef} className="settings-form" data-testid="settings-form" onSubmit={(e) => e.preventDefault()}>
           <SettingsGroup id="set-appearance" title="Appearance">
             <SettingRow label="Theme" htmlFor="set-theme" description="System follows the Windows color scheme.">
               <Select
