@@ -17,7 +17,7 @@ import { api, errorCode } from '../platform';
 import { useApp, useAppStore } from '../state/AppStore';
 import { Button, Dialog, FieldError, Menu, MenuItem, MenuSeparator, Scrim, Toast, TreeInputRow } from '../ui';
 import { baseName, isSameOrInside, joinPath, parentPath, selectionEnd, validateName } from '../core/fileNames';
-import { closeExplorerContextMenu, onExplorerContextMenu, samePath } from '../views/Explorer';
+import { closeExplorerContextMenu, onExplorerContextMenu, revealInExplorer, samePath } from '../views/Explorer';
 
 /* ---------- target ---------- */
 
@@ -248,6 +248,8 @@ export function ExplorerContextMenu() {
     const depth = target.isDir ? target.depth + 1 : target.depth;
     const place = placementFor(target.anchor, true);
     closeMenu();
+    // The entry goes inside a clicked folder: open it so the new entry has a visible place in the tree.
+    if (target.isDir && !menu.isRoot) revealInExplorer(parent, { expandSelf: true });
     setEdit({ kind: 'new', isDir, parent, depth: Math.max(0, depth), place });
   };
 
@@ -298,6 +300,8 @@ export function ExplorerContextMenu() {
         if (current.isDir) await api.fs.createDir(path);
         else await api.fs.createFile(path);
         setEdit(null);
+        // Expands every folder down to the new entry and selects it once the re-read tree shows it.
+        revealInExplorer(path);
         bump();
         setToast(current.isDir ? 'Folder created' : 'File created');
         return null;
