@@ -8,7 +8,8 @@
    ========================================================================== */
 
 /* ---------- 1. Tokens ---------- */
-:root {
+/* .theme-light / .theme-dark scope a theme to a subtree (the dev gallery shows both side by side). */
+:root, .theme-light {
   color-scheme: light;
 
   /* typography */
@@ -95,7 +96,7 @@
   --shadow-pop: 0 8px 28px rgba(15, 20, 30, 0.18), 0 1px 3px rgba(15, 20, 30, 0.12);
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"], .theme-dark {
   color-scheme: dark;
   --c-bg: #1a1d23;
   --c-sidebar: #1f232a;
@@ -533,3 +534,6 @@ mark.hit { background: var(--c-match); color: inherit; border-radius: 2px; }
 .menu-item:disabled:hover { background: none; }
 .resizer[data-dragging="true"] { background: var(--c-accent); opacity: 0.6; }
 .editor-area { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.sidebar-actions { display: flex; align-items: center; gap: 2px; }
+.qp-hint.is-invalid { color: var(--c-danger); }
+.theme-light, .theme-dark { background: var(--c-bg); color: var(--c-fg); }
