@@ -9,6 +9,8 @@ import { registerHandler, runCommand } from '../commands/registry';
 import { cycleTab } from '../core/tabs';
 import { getActiveView } from '../editor/keymaps';
 import { TabItem } from '../ui/Tab';
+// One definition of "dirty" for the tab dot, the save prompt and Save All.
+import { isDirty } from './SavePrompt';
 
 const DRAG_TYPE = 'application/x-code-editor-tab';
 
@@ -82,7 +84,7 @@ export function TabBar() {
             title={tab.path}
             active={tab.path === state.activeTab}
             preview={tab.preview}
-            dirty={doc ? doc.text !== doc.savedText : false}
+            dirty={isDirty(doc)}
             readOnly={doc?.readOnly ?? false}
             dragging={dragFrom === index}
             dropTarget={dropAt === index && dragFrom !== null && dragFrom !== index}
