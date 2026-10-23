@@ -11,7 +11,7 @@ export { Select } from './Select';
 export type { SelectOption, SelectProps } from './Select';
 export { FieldLabel, FieldError, Field, InputGroup, SettingsGroup, SettingRow } from './FormField';
 export { Dialog, Scrim } from './Dialog';
-export type { DialogProps } from './Dialog';
+export type { DialogProps, DialogMetaEntry } from './Dialog';
 export { Menu, MenuItem, MenuSeparator } from './Menu';
 export type { MenuProps, MenuItemProps } from './Menu';
 export { OverlayList, OverlayInput, OverlayListBox, OverlayHeading, OverlayEmpty, OverlayHint, OverlayFooter, ListRow, HighlightedText } from './OverlayList';
