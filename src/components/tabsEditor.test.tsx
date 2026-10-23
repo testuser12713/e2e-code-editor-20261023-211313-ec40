@@ -8,6 +8,7 @@ import { runCommand } from '../commands/registry';
 import { getActiveView } from '../editor/keymaps';
 import { TabBar } from './TabBar';
 import { EditorPane } from './EditorPane';
+import { SavePrompt } from './SavePrompt';
 import type { ReadFileResult } from '../types';
 
 // jsdom has no layout: CodeMirror's measuring needs these Range methods to exist.
@@ -178,5 +179,79 @@ describe('tabs and editor host', () => {
     act(() => store.dispatch({ type: 'doc/reload', path: A, text: 'fresh\n', eol: 'lf' }));
     expect(editorText()).toBe('fresh\n');
     expect(screen.getByTestId('tab-a.ts').className).not.toContain('is-dirty');
+  });
+
+  it('focuses the editor when a file is opened, so typing goes into it', async () => {
+    const store = setup();
+    (document.activeElement as HTMLElement | null)?.blur();
+    await open(store, A);
+    const view = getActiveView();
+    expect(view && view.dom.contains(document.activeElement)).toBe(true);
+  });
+
+  it('focuses the editor when the tab is made permanent from outside (double click in the explorer)', async () => {
+    const store = setup();
+    await open(store, A, { preview: true });
+    const row = document.createElement('button');
+    document.body.appendChild(row);
+    row.focus();
+    await open(store, A, { preview: false });
+    const view = getActiveView();
+    expect(view && view.dom.contains(document.activeElement)).toBe(true);
+    row.remove();
+  });
+
+  it('does not take the focus away from a text field', async () => {
+    const store = setup();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    await open(store, A);
+    expect(document.activeElement).toBe(input);
+    input.remove();
+  });
+});
+
+describe('dirty marker, save and close flow', () => {
+  it('an edit marks the tab dirty, file.save clears it, tab.close then closes without asking', async () => {
+    vi.spyOn(api.fs, 'readFile').mockImplementation(async (p: string) => {
+      const r = FILES[p];
+      if (!r) throw new Error('not-found');
+      return r;
+    });
+    const writes: { path: string; content: string }[] = [];
+    vi.spyOn(api.fs, 'writeFile').mockImplementation(async (path: string, content: string) => {
+      writes.push({ path, content });
+    });
+    const store = createAppStore();
+    render(
+      <AppStoreProvider store={store}>
+        <TabBar />
+        <EditorPane />
+        <SavePrompt />
+      </AppStoreProvider>,
+    );
+    (document.activeElement as HTMLElement | null)?.blur();
+    await open(store, B, { preview: true });
+
+    const view = getActiveView();
+    if (!view) throw new Error('no view');
+    expect(view.dom.contains(document.activeElement)).toBe(true);
+    typeInEditor('x');
+    expect(screen.getByTestId('tab-b.md').className).toContain('is-dirty');
+    expect(screen.getByTestId('tab-b.md').className).not.toContain('is-preview');
+
+    await act(async () => {
+      runCommand('file.save');
+    });
+    await waitFor(() => expect(screen.getByTestId('tab-b.md').className).not.toContain('is-dirty'));
+    expect(writes).toEqual([{ path: B, content: 'x# Title\r\ntext\r\n' }]);
+
+    await act(async () => {
+      runCommand('tab.close');
+    });
+    await waitFor(() => expect(store.getState().tabs).toEqual([]));
+    expect(screen.queryByTestId('unsaved-dialog')).toBeNull();
+    expect(screen.queryByTestId('tab-b.md')).toBeNull();
   });
 });
