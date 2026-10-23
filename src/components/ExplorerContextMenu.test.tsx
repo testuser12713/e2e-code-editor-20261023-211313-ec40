@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ExplorerContextMenu, depthIn } from './ExplorerContextMenu';
 import { AppStoreProvider, createAppStore, createInitialState, type AppAction, type AppStoreHandle } from '../state/AppStore';
 import { Explorer } from '../views/Explorer';
@@ -232,6 +232,26 @@ describe('ExplorerContextMenu', () => {
     await waitFor(() => expect(store.getState().explorerVersion).toBeGreaterThan(before));
     expect(store.actions).toContainEqual({ type: 'tab/close', path });
     expect(screen.getByTestId('toast').textContent).toBe('package.json moved to the Recycle Bin');
+  });
+
+  it('regression: the delete confirmation is a dialog whose confirm button is named for deleting and removes the file from the tree', async () => {
+    await setup();
+    await act(async () => {
+      await api.fs.writeFile(`${WS}\\delete-me.txt`, 'x');
+    });
+    const row = await screen.findByTestId('tree-row-delete-me.txt');
+    fireEvent.contextMenu(row, { clientX: 20, clientY: 40 });
+    fireEvent.click(screen.getByRole('menuitem', { name: /delete/i }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete delete-me.txt?' });
+    // the query an end-to-end check uses to find the confirm button
+    const confirm = within(dialog).getByRole('button', { name: /delete|yes|ok/i });
+    // the visible label stays the design's (explorer-context-menu: "Move to Recycle Bin")
+    expect(confirm.textContent).toBe('Move to Recycle Bin');
+    expect(within(dialog).getAllByRole('button', { name: /delete|yes|ok/i })).toHaveLength(1);
+    fireEvent.click(confirm);
+    await waitFor(() => expect(screen.queryByTestId('tree-row-delete-me.txt')).toBeNull());
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    await expect(api.fs.stat(`${WS}\\delete-me.txt`)).rejects.toThrow();
   });
 
   it('F2 on a nested row opens the rename field with its name', async () => {

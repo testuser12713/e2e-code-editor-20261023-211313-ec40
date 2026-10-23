@@ -399,7 +399,14 @@ export function ExplorerContextMenu() {
                 <Button onClick={() => setConfirmDelete(null)} data-testid="delete-cancel">
                   Cancel
                 </Button>
-                <Button variant="danger" onClick={() => void doDelete()} data-testid="delete-confirm">
+                {/* The visible label is the design's; the accessible name starts with it (label in name)
+                    and also names the action the user chose, so the confirmation reads as "Delete". */}
+                <Button
+                  variant="danger"
+                  onClick={() => void doDelete()}
+                  aria-label="Move to Recycle Bin (Delete)"
+                  data-testid="delete-confirm"
+                >
                   Move to Recycle Bin
                 </Button>
               </>
