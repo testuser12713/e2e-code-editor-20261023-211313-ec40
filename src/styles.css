@@ -144,7 +144,9 @@
 
 /* ---------- 2. Base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
-html { height: 100%; -webkit-text-size-adjust: 100%; }
+/* The document root carries the theme background itself (not only <body>), so the
+   root, the window canvas and every container read the active theme's --c-bg. */
+html { height: 100%; -webkit-text-size-adjust: 100%; background: var(--c-bg); color: var(--c-fg); }
 body {
   margin: 0;
   height: 100%;
@@ -534,7 +536,8 @@ mark.hit { background: var(--c-match); color: inherit; border-radius: 2px; }
 }
 
 /* ---------- 7. App additions ---------- */
-#root { height: 100%; }
+#root { height: 100%; background: var(--c-bg); color: var(--c-fg); }
+.app { background: var(--c-bg); color: var(--c-fg); }
 .menubar-entry { position: relative; display: flex; align-items: center; }
 .menubar-entry > .menu { top: calc(100% + 2px); left: 0; }
 .menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
