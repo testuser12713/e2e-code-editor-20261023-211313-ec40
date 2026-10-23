@@ -1,0 +1,16 @@
+{
+  "runcontract": 1,
+  "services": [
+    {
+      "name": "app",
+      "dir": ".",
+      "stack": "electron",
+      "kind": "desktop",
+      "install": [["npm", "ci"]],
+      "build": [["npm", "run", "build"]],
+      "start": ["npx", "electron", "."],
+      "test": [["npm", "test"]],
+      "typecheck": [["npx", "tsc", "--noEmit"]]
+    }
+  ]
+}
