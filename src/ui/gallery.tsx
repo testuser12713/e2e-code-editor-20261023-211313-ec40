@@ -322,6 +322,22 @@ function DialogSection({ act }: { act: Act }) {
           Your changes will be lost if you don&apos;t save them.
         </Dialog>
       </div>
+      <div className="gallery-stage">
+        <Scrim />
+        <Dialog
+          title="Code Editor"
+          icon="logo"
+          autoFocus={false}
+          meta={[{ term: 'Version', value: '0.1.0' }]}
+          actions={
+            <Button variant="primary" onClick={() => act('about close')}>
+              Close
+            </Button>
+          }
+        >
+          A fast, keyboard-driven code editor for Windows.
+        </Dialog>
+      </div>
     </Section>
   );
 }

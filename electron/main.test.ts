@@ -118,7 +118,7 @@ function createFakeMainElectron() {
         webRequest: { onBeforeRequest: vi.fn() },
       },
     },
-    Menu: {},
+    Menu: { buildFromTemplate: vi.fn((t: unknown[]) => ({ items: t, getMenuItemById: () => null })), setApplicationMenu: vi.fn() },
     nativeTheme: { shouldUseDarkColors: false },
   };
   return { electron, handlers, appEvents, windows, resolveReady };
