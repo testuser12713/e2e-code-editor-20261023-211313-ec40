@@ -376,6 +376,11 @@ a.card:hover { border-color: var(--c-accent-border); background: var(--c-surface
 .tree-item[aria-expanded="true"] > .tree-row .tree-chevron { transform: rotate(90deg); }
 .tree-input-row { display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 var(--space-2) 0 calc(var(--space-2) + var(--depth, 0) * 14px + 18px); }
 .tree-input-row .input { height: 22px; font-size: var(--fs-md); border-color: var(--c-accent); }
+/* Inline name field of the explorer context menu: floats over / below the row it edits. */
+.explorer-inline-edit { position: fixed; z-index: 35; background: var(--c-sidebar); }
+.explorer-inline-edit .input { width: 100%; min-width: 0; }
+.explorer-inline-edit .input[aria-invalid="true"] { border-color: var(--c-danger); }
+.explorer-inline-error { padding: var(--space-1) var(--space-2); border: 1px solid var(--c-danger); border-radius: var(--radius-sm); background: var(--c-surface); box-shadow: var(--shadow-pop); }
 
 /* Tab bar */
 .tabbar { display: flex; flex: none; height: var(--tabbar-h); overflow-x: auto; scrollbar-width: none; background: var(--c-sidebar); border-bottom: 1px solid var(--c-border); }
